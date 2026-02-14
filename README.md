@@ -98,4 +98,3 @@ for episode in range(start_episodes, episodes + 1):
 
 ## References  
 - https://github.com/danijar/dreamerv3
-- https://github.com/kc-ml2/SimpleDreamer
