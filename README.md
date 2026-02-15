@@ -43,7 +43,7 @@ MSE represented the reconstruction loss of the “Gaussian log-likelihood” as 
 ## How to Run  
 **1. Clone the repository and install dependencies:** 
 ```
-git clone [your-repo-url]
+git clone https://github.com/Jeon-ChanYoung/Cookie-Run-AI.git
 pip install -r requirements.txt
 ```
 
