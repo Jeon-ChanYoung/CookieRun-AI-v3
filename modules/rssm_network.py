@@ -2,42 +2,42 @@ import torch
 import torch.nn as nn
 from torch.distributions import Independent, OneHotCategoricalStraightThrough
 from torch.distributions.utils import probs_to_logits
+from .blocks import ResBlock, SelfAttention
 
-######################## Encoder #########################
+######################## LatentEncoder #########################
 
-class Encoder(nn.Module):
+class LatentEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.config = config
 
         self.network = nn.Sequential(
-            nn.Conv2d(3, 16, 4, 2, 1, bias=False),    # (3, 128, 256) -> (16, 64, 128)
-            ImageChannelLayerNorm(16),
-            nn.SiLU(),
-            nn.Conv2d(16, 32, 4, 2, 1, bias=False),   # (16, 64, 128) -> (32, 32, 64)
-            ImageChannelLayerNorm(32),
-            nn.SiLU(),
-            nn.Conv2d(32, 64, 4, 2, 1, bias=False),   # (32, 32, 64)  -> (64, 16, 32)
+            # (4, 16, 32) -> (64, 8, 16)
+            nn.Conv2d(4, 64, 3, 2, 1, bias=False),
             ImageChannelLayerNorm(64),
             nn.SiLU(),
-            nn.Conv2d(64, 128, 4, 2, 1, bias=False),  # (64, 16, 32)  -> (128, 8, 16)
+
+            # (64, 8, 16) -> (128, 4, 8)
+            nn.Conv2d(64, 128, 3, 2, 1, bias=False),
             ImageChannelLayerNorm(128),
             nn.SiLU(),
-            nn.Conv2d(128, 256, 4, 2, 1, bias=False), # (128, 8, 16)  -> (256, 4, 8)
+
+            ResBlock(128),
+            SelfAttention(128),
+
+            # (128, 4, 8) -> (256, 2, 4)
+            nn.Conv2d(128, 256, 3, 2, 1, bias=False),
             ImageChannelLayerNorm(256),
             nn.SiLU(),
-            nn.Conv2d(256, 256, 4, 2, 1, bias=False), # (256, 4, 8)   -> (256, 2, 4)
-            ImageChannelLayerNorm(256),
-            nn.SiLU(),
+
+            ResBlock(256),
+
             nn.Flatten(),
-            nn.Linear(256 * 2 * 4, self.config.encoded_state_size),
+            nn.Linear(256 * 2 * 4, config.encoded_state_size, bias=False),
+            nn.LayerNorm(config.encoded_state_size),
+            nn.SiLU(),
         )
 
     def forward(self, x):
-        """
-        x shape      : (B, T, 3, 128, 256)        or (B, 3, 128, 256)
-        output shape : (B, T, encoded_state_size) or (B, encoded_state_size)
-        """
         if x.ndim == 5:
             B, T, C, H, W = x.shape
             x = x.view(B * T, C, H, W)
@@ -47,46 +47,49 @@ class Encoder(nn.Module):
             x = self.network(x)
         return x
 
-######################## Decoder #########################
+######################## LatentDecoder #########################
 
-class Decoder(nn.Module):
-    def __init__(self, config):
+class LatentDecoder(nn.Module):
+    def __init__(self, config, eps=1e-3):
         super().__init__()
         self.config = config
 
         self.network = nn.Sequential(
-            nn.Linear(self.config.recurrent_size + self.config.latent_size, 256 * 2 * 4),
-            nn.Unflatten(1, (256, 2, 4)),
-            nn.ConvTranspose2d(256, 256, 4, 2, 1, bias=False), # (256, 2, 4) -> (256, 4, 8)
-            ImageChannelLayerNorm(256),
+            nn.Linear(config.recurrent_size + config.latent_size, 256 * 2 * 4, bias=False),
+            nn.LayerNorm(256 * 2 * 4, eps=eps),
             nn.SiLU(),
-            nn.ConvTranspose2d(256, 128, 4, 2, 1, bias=False), # (256, 4, 8) -> (128, 8, 16)
+            nn.Unflatten(1, (256, 2, 4)),
+
+            ResBlock(256),
+
+            # (256, 2, 4) -> (128, 4, 8)
+            nn.Upsample(scale_factor=2, mode='nearest'),
+            nn.Conv2d(256, 128, 3, 1, 1, bias=False),
             ImageChannelLayerNorm(128),
             nn.SiLU(),
-            nn.ConvTranspose2d(128, 64, 4, 2, 1, bias=False),  # (128, 8, 16) -> (64, 16, 32)
-            ImageChannelLayerNorm(64),
+
+            ResBlock(128),
+            SelfAttention(128),
+
+            # (128, 4, 8) -> (64, 8, 16)
+            nn.Upsample(scale_factor=2, mode='nearest'),
+            nn.Conv2d(128, 64, 3, 1, 1, bias=False),
+            ImageChannelLayerNorm(64, eps),
             nn.SiLU(),
-            nn.ConvTranspose2d(64, 32, 4, 2, 1, bias=False),   # (64, 16, 32) -> (32, 32, 64)
-            ImageChannelLayerNorm(32),
-            nn.SiLU(),
-            nn.ConvTranspose2d(32, 16, 4, 2, 1, bias=False),   # (32, 32, 64) -> (16, 64, 128)
-            ImageChannelLayerNorm(16),
-            nn.SiLU(),
-            nn.ConvTranspose2d(16, 3, 4, 2, 1),    # (16, 64, 128) -> (3, 128, 256)
+
+            # (64, 8, 16) -> (4, 16, 32)
+            nn.Upsample(scale_factor=2, mode='nearest'),
+            nn.Conv2d(64, config.latent_channel, 3, 1, 1),
         )
 
     def forward(self, hidden, latent):
-        """
-        x shape      : (B, recurrent_size + latent_size) or (B, T, recurrent_size + latent_size)
-        output shape : (B, 3, 128, 256)                  or (B, T, 3, 128, 256)
-        """
         x = torch.cat((hidden, latent), dim=-1)
-        
+
         if x.ndim == 3:
             B, T, C = x.shape
             x = x.view(B * T, C)
             x = self.network(x)
-            x = x.view(B, T, *self.config.observation_shape)
+            x = x.view(B, T, *self.config.latent_shape_vae)
         else:
             x = self.network(x)
         return x
@@ -132,7 +135,7 @@ class GRUCell(nn.Module):
         return out
 
 class RecurrentModel(nn.Module):
-    def __init__(self, config, hidden_size=256, eps=1e-3):
+    def __init__(self, config, hidden_size=512, eps=1e-3):
         super().__init__()
         self.config = config
 
@@ -152,7 +155,7 @@ class RecurrentModel(nn.Module):
 ######################## TransitionModel #########################
 
 class TransitionModel(nn.Module):
-    def __init__(self, config, hidden_size=256, eps=1e-3):
+    def __init__(self, config, hidden_size=512, eps=1e-3):
         super().__init__()
         self.config = config
 
@@ -160,6 +163,11 @@ class TransitionModel(nn.Module):
             nn.Linear(self.config.recurrent_size, hidden_size, bias=False),
             nn.LayerNorm(hidden_size, eps=eps),
             nn.SiLU(),
+
+            nn.Linear(hidden_size, hidden_size, bias=False),
+            nn.LayerNorm(hidden_size, eps=eps),
+            nn.SiLU(),
+
             nn.Linear(hidden_size, self.config.latent_size),
         )
 
@@ -177,7 +185,7 @@ class TransitionModel(nn.Module):
 ######################## RepresentationModel #########################
 
 class RepresentationModel(nn.Module):
-    def __init__(self, config, hidden_size=256, eps=1e-3):
+    def __init__(self, config, hidden_size=512, eps=1e-3):
         super().__init__()
         self.config = config
 
@@ -185,11 +193,16 @@ class RepresentationModel(nn.Module):
             nn.Linear(self.config.recurrent_size + self.config.encoded_state_size, hidden_size, bias=False),
             nn.LayerNorm(hidden_size, eps=eps),
             nn.SiLU(),
+
+            nn.Linear(hidden_size, hidden_size, bias=False),
+            nn.LayerNorm(hidden_size, eps=eps),
+            nn.SiLU(),
+
             nn.Linear(hidden_size, self.config.latent_size),
         )
 
-    def forward(self, hidden, latent):
-        x = torch.cat((hidden, latent), -1)
+    def forward(self, hidden, encoded_state):
+        x = torch.cat((hidden, encoded_state), -1)
         x = self.network(x)
 
         probs = x.view(-1, self.config.latent_length, self.config.latent_classes).softmax(-1)

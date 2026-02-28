@@ -5,68 +5,63 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 
-from torch.distributions import Normal, Independent
-from .rssm_network import Encoder, Decoder, RecurrentModel, TransitionModel, RepresentationModel
+from .rssm_network import LatentEncoder, LatentDecoder, RecurrentModel, TransitionModel, RepresentationModel
 
 ######################## Recurrent State Space Model #########################
 
-class RSSM:
+class RSSM(nn.Module):
     def __init__(self, config):
+        super().__init__()
+
         self.config = config
  
         # model
-        self.encoder = Encoder().to(config.device)
-        self.decoder = Decoder().to(config.device)
-        self.recurrent_model = RecurrentModel().to(config.device)
-        self.transition_model = TransitionModel().to(config.device)
-        self.representation_model = RepresentationModel().to(config.device)
+        self.encoder = LatentEncoder(config)
+        self.decoder = LatentDecoder(config)
+        self.recurrent_model = RecurrentModel(config)
+        self.transition_model = TransitionModel(config)
+        self.representation_model = RepresentationModel(config)
 
         # optimizer
-        self.network_modules = [
-            self.encoder,
-            self.decoder,
-            self.recurrent_model,
-            self.transition_model,
-            self.representation_model
-        ]
+        self.rssm_optimizer = optim.Adam(self.parameters(), lr=config.rssm_lr)
 
-        self.world_model_parameters = []
-        for module in self.network_modules:
-            self.world_model_parameters += list(module.parameters())
-
-        self.world_model_optimizer = optim.AdamW(
-            self.world_model_parameters,
-            lr=config.world_model_lr,
-            weight_decay=config.world_model_weight_decay
-        )
+        # normalization
+        self.register_buffer('z_mean', torch.zeros(4, 1, 1))
+        self.register_buffer('z_std',  torch.ones(4, 1, 1))
 
         self.load_rssm(config.rssm_path)
 
-    def train_step(self, states, actions):
+    def train_step(self, zs, actions):
         """
-            states:  (B, T, 3, 128, 256)
+            zs:      (B, T, 4, 16, 32)
             actions: (B, T, 3)
         """
-        B, T = states.shape[:2] 
-        encoded_states = self.encoder(states)
+        B, T = zs.shape[:2] 
+        zs_norm = self.normalize(zs)
+        encoded_states = self.encoder(zs_norm)
 
         hidden = torch.zeros(B, self.config.recurrent_size, device=self.config.device)
         latent = torch.zeros(B, self.config.latent_size, device=self.config.device)
 
-        hiddens = torch.zeros(B, T-1, self.config.recurrent_size, device=self.config.device)
-        latents = torch.zeros(B, T-1, self.config.latent_size, device=self.config.device)
-        priors_logits = torch.zeros(B, T-1, self.config.latent_length, self.config.latent_classes, device=self.config.device)
-        posteriors_logits = torch.zeros(B, T-1, self.config.latent_length, self.config.latent_classes, device=self.config.device)
+        hiddens = []                                     
+        latents = []
+        priors_logits = []
+        posteriors_logits = []
 
         for t in range(1, T):
             hidden = self.recurrent_model(hidden, latent, actions[:, t-1])
             _, prior_logits = self.transition_model(hidden)
             latent, posterior_logits = self.representation_model(hidden, encoded_states[:, t])
 
-            hiddens[:, t-1] = hidden
-            latents[:, t-1] = latent
-            priors_logits[:, t-1] = prior_logits
-            posteriors_logits[:, t-1] = posterior_logits
+            hiddens.append(hidden)
+            latents.append(latent)
+            priors_logits.append(prior_logits)
+            posteriors_logits.append(posterior_logits)
+
+        hiddens = torch.stack(hiddens, dim=1)            
+        latents = torch.stack(latents, dim=1)            
+        priors_logits = torch.stack(priors_logits, dim=1)
+        posteriors_logits = torch.stack(posteriors_logits, dim=1)
 
         """
         hiddens:           (B, T-1, recurrent_size)
@@ -78,12 +73,9 @@ class RSSM:
         ############# compute loss #############
 
         # recon loss
-        reconstruction_means = self.decoder(hiddens, latents)
-        reconstruction_dist = Independent(
-            Normal(reconstruction_means, 1),
-            len(self.config.observation_shape)
-        )
-        reconstruction_loss = -reconstruction_dist.log_prob(states[:, 1:]).mean()
+        predicted_latents = self.decoder(hiddens, latents)
+        target_latents = zs_norm[:, 1:]
+        reconstruction_loss = F.mse_loss(predicted_latents, target_latents)
 
         # kl loss
         prior_loss = self.compute_kl(posteriors_logits.detach(), priors_logits)
@@ -105,7 +97,7 @@ class RSSM:
         )
         self.world_model_optimizer.step()
 
-        return reconstruction_loss.item(), kl_loss.item()
+        return loss.item(), reconstruction_loss.item(), kl_loss.item()
     
 
     def compute_kl(self, logits_p, logits_q):
@@ -113,6 +105,20 @@ class RSSM:
         log_p = F.log_softmax(logits_p, dim=-1)
         log_q = F.log_softmax(logits_q, dim=-1)
         return (p * (log_p - log_q)).sum(dim=(-2, -1))
+    
+
+    def normalize(self, z):
+        return (z - self.z_mean) / self.z_std
+
+
+    def denormalize(self, z_norm):
+        return z_norm * self.z_std + self.z_mean
+
+
+    def set_latent_stats(self, mean, std):
+        self.z_mean.copy_(mean)
+        self.z_std.copy_(std)
+        print(f"Latent stats set: mean={mean.squeeze()}, std={std.squeeze()}")
 
 
     def change_train_mode(self, train=True):
@@ -129,25 +135,29 @@ class RSSM:
 
 
     def save_rssm(self, epoch, save_dir):
-        save_path = os.path.join(save_dir, f'oow_ep{epoch}.pth')
+        save_path = os.path.join(save_dir, f'rssm_ep{epoch}.pth')
         torch.save({
             'encoder'               : self.encoder.state_dict(),
             'decoder'               : self.decoder.state_dict(),
             'recurrent_model'       : self.recurrent_model.state_dict(),
             'transition_model'      : self.transition_model.state_dict(),
             'representation_model'  : self.representation_model.state_dict(),
-            'world_model_optimizer' : self.world_model_optimizer.state_dict()
+            'rssm_optimizer'        : self.rssm_optimizer.state_dict(),
+            'z_mean'                : self.z_mean,
+            'z_std'                 : self.z_std,
         }, save_path)
-        print(f"💾 RSSM Model saved: {save_path}")
+        print(f"RSSM Model saved: {save_path}")
 
 
     def load_rssm(self, check_point_path):
-        print(f"📁 Loading checkpoint: {check_point_path}")
+        print(f"Loading checkpoint: {check_point_path}")
         checkpoint = torch.load(check_point_path, map_location=self.config.device)
         self.encoder.load_state_dict(checkpoint['encoder'])
         self.decoder.load_state_dict(checkpoint['decoder'])
         self.recurrent_model.load_state_dict(checkpoint['recurrent_model'])
         self.transition_model.load_state_dict(checkpoint['transition_model'])
         self.representation_model.load_state_dict(checkpoint['representation_model'])
-        self.world_model_optimizer.load_state_dict(checkpoint['world_model_optimizer'])
+        self.rssm_optimizer.load_state_dict(checkpoint['rssm_optimizer'])
+        self.z_mean.copy_(checkpoint['z_mean'])
+        self.z_std.copy_(checkpoint['z_std'])
         print("RSSM Checkpoint loaded successfully.")
