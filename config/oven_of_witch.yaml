@@ -1,22 +1,18 @@
 map_name: oven_of_witch
-model_path: model_params/oow_ep100.pth
-npz_dataset_path: dataset/oow_combined_data.npz
+
+vae_path: model_params/vae_ep60.pth
+rssm_path: model_params/rssm_ep300.pth
+lfm_path: model_params/lfm_ep100.pth
+
+# npz_dataset_path: dataset/oow_combined_data.npz
 is_train: false
 
-# device
-device: cpu # cuda:0 Training must be done using CUDA, but CPU is sufficient for simulation.
-
-# environment
 observation_shape: [3, 128, 256] # (Channels, Height, Width)
 action_size: 3 # (none, jump, slide)
 
-# training
-start_episodes: 1
-episodes: 300
-world_model_update_step: 50
-
-batch_size: 50
-batch_length: 50
+device: cpu 
+latent_channel: 4
+latent_shape_vae: [4, 16, 32]
 
 # model sizes
 encoded_state_size: 1024
@@ -25,16 +21,38 @@ latent_length: 16
 latent_classes: 16
 latent_size: 256 # 16 * 16 latent_length * latent_classes
 
-# loss / regularization
+# gradient
+gradient_norm_type: 2
+gradient_clip: 100
+
+#################### VAE hyperparameter ####################
+
+vae_train_epochs: 60
+vae_batch_size: 128
+
+vae_lr: 0.0003
+vae_kl_weight: 0.00001
+
+#################### RSSM hyperparameter ####################
+
+rssm_train_epochs: 100
+rssm_batch_size: 50
+rssm_batch_length: 50
+
+world_model_lr: 0.0001
+world_model_weight_decay: 0.0001
+
 uniform_mix: 0.01
 posterior_coefficient: 0.1
 prior_coefficient: 0.5
 free_nat: 1
 
-# optimizer
-world_model_lr: 0.0001
-world_model_weight_decay: 0.0001
+#################### LFM hyperparameter ####################
 
-# gradient
-gradient_norm_type: 2
-gradient_clip: 100
+lfm_train_epochs: 100
+lfm_batch_size: 32
+lfm_batch_length: 12
+
+ema_decay: 0.999
+flow_lr: 0.0003
+flow_weight_decay: 0.0001

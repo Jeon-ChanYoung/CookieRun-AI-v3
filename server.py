@@ -2,7 +2,9 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 
-from modules.world_model import WorldModel
+from modules.vae import VAE
+from modules.rssm import RSSM
+from modules.world_model import LFMWorldModel
 from wrapper import Wrapper
 
 def create_app(config):
@@ -13,7 +15,9 @@ def create_app(config):
     app.mount("/static", StaticFiles(directory=static_path), name="static")
     
     print("🔄 Loading resources...")
-    world_model = WorldModel(config)
+    vae = VAE(config)
+    rssm = RSSM(config)
+    world_model = LFMWorldModel(config, vae, rssm)
     print("✅ Resources loaded.")
     
     @app.get("/", response_class=HTMLResponse)
