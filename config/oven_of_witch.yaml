@@ -29,13 +29,13 @@ vae_batch_size: 64
 rssm_train_epochs: 100
 rssm_lr: 0.0003
 
-rssm_batch_size: 512
-rssm_batch_length: 32
+rssm_batch_size: 200
+rssm_batch_length: 50
 
-encoded_state_size: 512
+encoded_state_size: 1024
 recurrent_size: 512
-latent_length: 32
-latent_classes: 32
+latent_length: 16
+latent_classes: 16
 latent_size: latent_length * latent_classes
 
 uniform_mix: 0.01

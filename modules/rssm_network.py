@@ -143,6 +143,9 @@ class RecurrentModel(nn.Module):
             nn.Linear(self.config.latent_size + self.config.action_size, hidden_size, bias=False),
             nn.LayerNorm(hidden_size, eps=eps),
             nn.SiLU(),
+            nn.Linear(hidden_size, hidden_size, bias=False),
+            nn.LayerNorm(hidden_size, eps=eps),
+            nn.SiLU(),
         )
         self.recurrent = GRUCell(hidden_size, self.config.recurrent_size)
 
