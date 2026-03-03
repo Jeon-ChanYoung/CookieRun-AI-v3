@@ -1,9 +1,16 @@
-# Cookie-Run-AI
-Play in an AI-generated environment by learning the first stage of Cookie Run Ovenbreak, "The Witch's Oven."
+# Cookie-Run-AI-v2
+Play in an AI-generated environment by learning the first stage of Cookie Run Ovenbreak, "The Witch's Oven."  
 
-- Observation Size: 128×256 pixels  
-- Action Space: 3 actions (None, Jump, Slide)  
-- Training Data: 31 real gameplay videos (approximately 27,000 frames)
+**Previous Version:**
+https://github.com/Jeon-ChanYoung/Cookie-Run-AI
+
+<br>
+
+| Item | Detail |
+|------|--------|
+| **Observation Size** | 128×256 pixels |
+| **Action Space** | 3 actions (None, Jump, Slide) |
+| **Training Data** | 31 real gameplay videos (~27,000 frames) |
 
 <br>
   
@@ -15,9 +22,17 @@ Play in an AI-generated environment by learning the first stage of Cookie Run Ov
 ## Fake (AI-generated)
 <img src="assets/fake.gif" width="512"/>  
 
-#### Model Architecture & Quality Note
+#### Model Architecture & Improvements
 
-This project utilizes a **Recurrent State-Space Model (RSSM)**. Please note that the generation quality is currently limited due to the relatively low resolution and small size of the training dataset. The training data consists of state-action sequences. Transitions involving "Game Over" screens or progression to subsequent stages were **excluded** from the training set to maintain continuity within the specific stage.  
+This project is an **enhanced version of Cookie-Run-AI v1**, featuring significant architectural improvements over the original RSSM (Recurrent State-Space Model) implementation.  
+
+| Feature | v1 | v2 |
+|---------|----|----|
+| **Training Approach** | End-to-end | Two-stage (VQ-VAE → RSSM) |
+| **Latent Space** | Pixel-level reconstruction | Discrete latent tokens |
+| **Encoder** | Standard CNN | Pre-trained VQ-VAE encoder |
+| **Reconstruction Target** | Raw pixels | Latent representations |  
+
 
 <br>
 
@@ -53,7 +68,8 @@ pip install -r requirements.txt
 Download the pre-trained weights (oow_ep300.pth) from the Releases page and place them in the directory structure as follows:  
 ```
 model_params/
-    └── oow_ep300.pth
+    └── rssm_ep100.pth
+    └── vqvae_ep30.pth
 ```
 If model_params does not exist, create it.  
 
