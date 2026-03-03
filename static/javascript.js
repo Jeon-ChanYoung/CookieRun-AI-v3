@@ -92,7 +92,6 @@ function handleJump() {
 
     sendAction('jump');
 
-    // jump는 1회성 → 짧은 딜레이 후 none 복귀
     setTimeout(() => sendAction('none'), 100);
 
     const btn = document.getElementById('btn-jump');
