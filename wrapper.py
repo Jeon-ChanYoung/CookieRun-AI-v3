@@ -117,11 +117,6 @@ class Wrapper:
     
 
     def image_to_base64(self, img):
-        if isinstance(img, torch.Tensor):
-            img = img.cpu().numpy()
-        if img.dtype != np.uint8:
-            img = (img * 255).astype(np.uint8)
-
         _, encoded = cv2.imencode(
             '.jpg', 
             cv2.cvtColor(img, cv2.COLOR_RGB2BGR),

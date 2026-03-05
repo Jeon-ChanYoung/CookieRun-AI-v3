@@ -64,7 +64,6 @@ class Decoder(nn.Module):
             nn.LayerNorm(128 * 2 * 4, eps=eps),
             nn.SiLU(),
             nn.Unflatten(1, (128, 2, 4)),
-            ResBlock(128),
 
             # (128, 2, 4) -> (96, 4, 8)
             nn.Upsample(scale_factor=2, mode='nearest'),

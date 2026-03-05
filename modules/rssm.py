@@ -130,14 +130,17 @@ class RSSM(nn.Module):
 
 
     def save_rssm(self, epoch, save_dir):
+        def strip_prefix(state_dict):
+            return {k.replace('_orig_mod.', ''): v for k, v in state_dict.items()}
+
         save_path = os.path.join(save_dir, f'rssm_ep{epoch}.pth')
         torch.save({
-            'encoder'               : self.encoder.state_dict(),
-            'decoder'               : self.decoder.state_dict(),
-            'recurrent_model'       : self.recurrent_model.state_dict(),
-            'transition_model'      : self.transition_model.state_dict(),
-            'representation_model'  : self.representation_model.state_dict(),
-            'rssm_optimizer'        : self.rssm_optimizer.state_dict(),
+            'encoder'               : strip_prefix(self.encoder.state_dict()),
+            'decoder'               : strip_prefix(self.decoder.state_dict()),
+            'recurrent_model'       : strip_prefix(self.recurrent_model.state_dict()),
+            'transition_model'      : strip_prefix(self.transition_model.state_dict()),
+            'representation_model'  : strip_prefix(self.representation_model.state_dict()),
+            'rssm_optimizer'        : self.rssm_optimizer.state_dict()
         }, save_path)
         print(f"RSSM Model saved: {save_path}")
 
@@ -145,10 +148,14 @@ class RSSM(nn.Module):
     def load_rssm(self, check_point_path):
         print(f"Loading checkpoint: {check_point_path}")
         checkpoint = torch.load(check_point_path, map_location=self.config.device)
-        self.encoder.load_state_dict(checkpoint['encoder'])
-        self.decoder.load_state_dict(checkpoint['decoder'])
-        self.recurrent_model.load_state_dict(checkpoint['recurrent_model'])
-        self.transition_model.load_state_dict(checkpoint['transition_model'])
-        self.representation_model.load_state_dict(checkpoint['representation_model'])
+
+        def strip_prefix(state_dict):
+            return {k.replace('_orig_mod.', ''): v for k, v in state_dict.items()}
+
+        self.encoder.load_state_dict(strip_prefix(checkpoint['encoder']))
+        self.decoder.load_state_dict(strip_prefix(checkpoint['decoder']))
+        self.recurrent_model.load_state_dict(strip_prefix(checkpoint['recurrent_model']))
+        self.transition_model.load_state_dict(strip_prefix(checkpoint['transition_model']))
+        self.representation_model.load_state_dict(strip_prefix(checkpoint['representation_model']))
         self.rssm_optimizer.load_state_dict(checkpoint['rssm_optimizer'])
         print("RSSM Checkpoint loaded successfully.")

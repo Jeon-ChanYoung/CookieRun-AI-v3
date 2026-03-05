@@ -41,7 +41,6 @@ function connectWebSocket() {
 
     ws.onclose = () => {
         console.log("Disconnected, reconnecting...");
-        stopAllActions();
         setTimeout(connectWebSocket, 1000);
     };
 
@@ -92,7 +91,7 @@ function handleJump() {
 
     sendAction('jump');
 
-    setTimeout(() => sendAction('none'), 100);
+    // setTimeout(() => sendAction('none'), 100);
 
     const btn = document.getElementById('btn-jump');
     btn.classList.add('active');

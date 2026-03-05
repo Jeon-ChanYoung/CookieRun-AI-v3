@@ -69,22 +69,29 @@ def create_app(config):
                 frame_start = asyncio.get_event_loop().time()
                 
                 action = latest_action
-                
-                if action == "reset":
-                    img = await asyncio.to_thread(wrapper.reset)
+                if action in ("jump", "reset"):
                     latest_action = "none"
-                else:
-                    img = await asyncio.to_thread(wrapper.step, action)
-                
-                img_base64 = await asyncio.to_thread(wrapper.image_to_base64, img)
-                
+            
                 try:
+                    if action == "reset":
+                        img = await asyncio.to_thread(wrapper.reset)
+                    else:
+                        img = await asyncio.to_thread(wrapper.step, action)
+                    
+                    img_base64 = await asyncio.to_thread(
+                        wrapper.image_to_base64, img
+                    )
+                    
                     await websocket.send_json({
                         "status": "success",
                         "image": img_base64,
                         "current_action": action
                     })
-                except:
+                except WebSocketDisconnect:
+                    running = False
+                    break
+                except Exception as e:
+                    print(f"Frame error: {e}")
                     running = False
                     break
                 
@@ -92,7 +99,7 @@ def create_app(config):
                 sleep_time = FRAME_INTERVAL - elapsed
                 if sleep_time > 0:
                     await asyncio.sleep(sleep_time)
-        
+            
         try:
             await asyncio.gather(
                 receive_actions(),

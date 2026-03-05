@@ -87,10 +87,14 @@ class VQVAE(nn.Module):
 
 
     def save_vqvae(self, epoch, save_dir):
+        def strip_prefix(state_dict):
+            return {k.replace('_orig_mod.', ''): v for k, v in state_dict.items()}
+
         save_path = os.path.join(save_dir, f'vqvae_ep{epoch}.pth')
+
         torch.save({
-            'encoder':   self.encoder.state_dict(),
-            'decoder':   self.decoder.state_dict(),
+            'encoder':   strip_prefix(self.encoder.state_dict()),  
+            'decoder':   strip_prefix(self.decoder.state_dict()),   
             'quantizer': {k: v for k, v in self.quantizer.state_dict().items()},
             'optimizer': self.optimizer.state_dict(),
             'scheduler': self.scheduler.state_dict(),
@@ -100,9 +104,13 @@ class VQVAE(nn.Module):
 
     def load_vqvae(self, checkpoint_path):
         print(f"Loading VQ-VAE: {checkpoint_path}")
+
+        def strip_prefix(state_dict):
+            return {k.replace('_orig_mod.', ''): v for k, v in state_dict.items()}
+
         checkpoint = torch.load(checkpoint_path, map_location=self.config.device)
-        self.encoder.load_state_dict(checkpoint['encoder'])
-        self.decoder.load_state_dict(checkpoint['decoder'])
+        self.encoder.load_state_dict(strip_prefix(checkpoint['encoder']))
+        self.decoder.load_state_dict(strip_prefix(checkpoint['decoder']))
         self.quantizer.load_state_dict(checkpoint['quantizer'])
         self.optimizer.load_state_dict(checkpoint['optimizer'])
         self.scheduler.load_state_dict(checkpoint['scheduler'])
