@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from torch.distributions.utils import probs_to_logits
-from .blocks import ResBlock, SelfAttention
+from .blocks import ResBlock, ImageChannelLayerNorm
 from .utils import straight_through_categorical
 
 ######################## Encoder #########################
@@ -26,22 +26,20 @@ class Encoder(nn.Module):
             ImageChannelLayerNorm(128),
             nn.SiLU(),
             ResBlock(128),
-            SelfAttention(128),
 
-            # (128, 4, 8) -> (256, 2, 4)
-            nn.Conv2d(128, 256, 3, 2, 1, bias=False),
-            ImageChannelLayerNorm(256),
+            # (128, 4, 8) -> (128, 2, 4)
+            nn.Conv2d(128, 128, 3, 2, 1, bias=False),
+            ImageChannelLayerNorm(128),
             nn.SiLU(),
-            ResBlock(256),
 
             nn.Flatten(),
-            nn.Linear(256 * 2 * 4, config.encoded_state_size, bias=False),
+            nn.Linear(128 * 2 * 4, config.encoded_state_size, bias=False),
             nn.LayerNorm(config.encoded_state_size),
             nn.SiLU(),
         )
 
     def forward(self, indices):
-        if indices.ndim == 5:
+        if indices.ndim == 4:
             B, T, H, W = indices.shape
             x = indices.reshape(B * T, H, W)
             x = self.embed(x)
@@ -62,33 +60,30 @@ class Decoder(nn.Module):
         self.config = config
 
         self.network = nn.Sequential(
-            nn.Linear(config.recurrent_size + config.latent_size, 256 * 2 * 4, bias=False),
-            nn.LayerNorm(256 * 2 * 4, eps=eps),
+            nn.Linear(config.recurrent_size + config.latent_size, 128 * 2 * 4, bias=False),
+            nn.LayerNorm(128 * 2 * 4, eps=eps),
             nn.SiLU(),
-            nn.Unflatten(1, (256, 2, 4)),
-            ResBlock(256),
-
-            # (256, 2, 4) -> (128, 4, 8)
-            nn.Upsample(scale_factor=2, mode='nearest'),
-            nn.Conv2d(256, 128, 3, 1, 1, bias=False),
-            ImageChannelLayerNorm(128),
-            nn.SiLU(),
-            ResBlock(128), 
-            SelfAttention(128),
-
-            # (128, 4, 8) -> (64, 8, 16)
-            nn.Upsample(scale_factor=2, mode='nearest'),
-            nn.Conv2d(128, 128, 3, 1, 1, bias=False),
-            ImageChannelLayerNorm(128, eps),
-            nn.SiLU(),
+            nn.Unflatten(1, (128, 2, 4)),
             ResBlock(128),
+
+            # (128, 2, 4) -> (96, 4, 8)
+            nn.Upsample(scale_factor=2, mode='nearest'),
+            nn.Conv2d(128, 96, 3, 1, 1, bias=False),
+            ImageChannelLayerNorm(96),
+            nn.SiLU(),
+
+            # (96, 4, 8) -> (64, 8, 16)
+            nn.Upsample(scale_factor=2, mode='nearest'),
+            nn.Conv2d(96, 64, 3, 1, 1, bias=False),
+            ImageChannelLayerNorm(64, eps),
+            nn.SiLU(),
 
             # (64, 8, 16)-> (K, 16, 32)
             nn.Upsample(scale_factor=2, mode='nearest'),
-            nn.Conv2d(128, 128, 3, 1, 1, bias=False),
-            ImageChannelLayerNorm(128, eps),
+            nn.Conv2d(64, 64, 3, 1, 1, bias=False),
+            ImageChannelLayerNorm(64, eps),
             nn.SiLU(),
-            nn.Conv2d(128, config.vq_codebook_size, 1)
+            nn.Conv2d(64, config.vq_codebook_size, 1)
         )
 
     def forward(self, hidden, latent):
@@ -102,19 +97,6 @@ class Decoder(nn.Module):
             x = x.view(B, T, K, H, W)
         else:
             x = self.network(x)
-        return x
-
-######################## ImageChannelLayerNorm #########################
-
-class ImageChannelLayerNorm(nn.Module):
-    def __init__(self, in_channels, eps=1e-3):
-        super().__init__()
-        self.norm = nn.LayerNorm(in_channels, eps=eps)
-
-    def forward(self, x):
-        x = x.permute(0, 2, 3, 1)  # (B, C, H, W) -> (B, H, W, C)
-        x = self.norm(x)
-        x = x.permute(0, 3, 1, 2)  # (B, H, W, C) -> (B, C, H, W)
         return x
     
 ######################## RecurrentModel #########################

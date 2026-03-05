@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .blocks import ResBlock, SelfAttention
+from .blocks import ResBlock
 
 ######################## VQ-VAE-Encoder #########################
 
@@ -17,28 +17,20 @@ class VQVAEEncoder(nn.Module):
             nn.GroupNorm(8, 64),
             nn.SiLU(),
             ResBlock(64),
-            ResBlock(64),
 
             # (64, 64, 128) -> (128, 32, 64)
             nn.Conv2d(64, 128, 3, 2, 1),
             nn.GroupNorm(8, 128),
             nn.SiLU(),
             ResBlock(128),
-            ResBlock(128),
 
-            # (128, 32, 64) -> (256, 16, 32)
-            nn.Conv2d(128, 256, 3, 2, 1),
-            nn.GroupNorm(8, 256),
+            # (128, 32, 64) -> (128, 16, 32)
+            nn.Conv2d(128, 128, 3, 2, 1),
+            nn.GroupNorm(8, 128),
             nn.SiLU(),
-            ResBlock(256),
-            ResBlock(256),
-            SelfAttention(256),
-            ResBlock(256),
 
-            # (256, 16, 32) -> (D, 16, 32)
-            nn.GroupNorm(8, 256),
-            nn.SiLU(),
-            nn.Conv2d(256, config.vq_code_dim, 1)
+            # (128, 16, 32) -> (D, 16, 32)
+            nn.Conv2d(128, config.vq_code_dim, 1)
         )
 
     def forward(self, x):
@@ -52,19 +44,16 @@ class VQVAEDecoder(nn.Module):
         self.config = config
 
         self.network = nn.Sequential(
-            # (D, 16, 32) -> (256, 16, 32) 
-            nn.Conv2d(config.vq_code_dim, 256, 3, 1, 1),
-            ResBlock(256),
-            ResBlock(256),
-            SelfAttention(256),
-            ResBlock(256),
-
-            # (256, 16, 32) -> (128, 32, 64) 
-            nn.Upsample(scale_factor=2, mode='nearest'),
-            nn.Conv2d(256, 128, 3, 1, 1),
+            # (D, 16, 32) -> (128, 16, 32) 
+            nn.Conv2d(config.vq_code_dim, 128, 3, 1, 1),
             nn.GroupNorm(8, 128),
             nn.SiLU(),
-            ResBlock(128),
+
+            # (128, 16, 32) -> (128, 32, 64) 
+            nn.Upsample(scale_factor=2, mode='nearest'),
+            nn.Conv2d(128, 128, 3, 1, 1),
+            nn.GroupNorm(8, 128),
+            nn.SiLU(),
             ResBlock(128),
 
             # (128, 32, 64) -> (64, 64, 128)
@@ -73,14 +62,13 @@ class VQVAEDecoder(nn.Module):
             nn.GroupNorm(8, 64),
             nn.SiLU(),
             ResBlock(64),
-            ResBlock(64),
 
             # (64, 64, 128) -> (3, 128, 256) 
             nn.Upsample(scale_factor=2, mode='nearest'),
-            nn.Conv2d(64, 32, 3, 1, 1),
-            nn.GroupNorm(8, 32),
+            nn.Conv2d(64, 64, 3, 1, 1),
+            nn.GroupNorm(8, 64),
             nn.SiLU(),
-            nn.Conv2d(32, 3, 3, 1, 1),
+            nn.Conv2d(64, 3, 3, 1, 1),
             nn.Sigmoid(),
         )
 
@@ -88,6 +76,10 @@ class VQVAEDecoder(nn.Module):
         return self.network(z)
     
 ######################## VQ-EMA ########################
+
+"""
+Reference: https://github.com/Jeon-ChanYoung/Flow-Matching-Pytorch
+"""
 
 class VectorQuantizerEMA(nn.Module):
     def __init__(self, config, eps=1e-5):
@@ -163,3 +155,46 @@ class VectorQuantizerEMA(nn.Module):
     @property
     def usage(self):
         return (self.cluster_size > 1.0).sum().item()
+
+#################### VGGPerceptualLoss ####################
+
+"""
+If you want to train this repo, use it.
+pip install torchvision
+from torchvision.models import vgg16, VGG16_Weights
+...
+
+"""
+class VGGPerceptualLoss(nn.Module):
+    pass
+
+# class VGGPerceptualLoss(nn.Module):
+#     def __init__(self):
+#         super().__init__()
+#         vgg = vgg16(weights=VGG16_Weights.IMAGENET1K_V1).features
+
+#         self.blocks = nn.ModuleList([vgg[:4], vgg[4:9], vgg[9:16]])
+
+#         for p in self.parameters():
+#             p.requires_grad = False
+
+#         self.register_buffer('mean', torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1))
+#         self.register_buffer('std',  torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1))
+
+#     def train(self, mode=True):
+#         return super().train(False)
+
+#     def forward(self, pred, target):
+#         pred   = (pred   - self.mean) / self.std
+#         target = (target - self.mean) / self.std
+
+#         loss = 0.0
+#         x, y = pred, target
+#         for block in self.blocks:
+#             x = block(x)
+
+#             with torch.no_grad():
+#                 y = block(y)
+
+#             loss += F.l1_loss(x, y)
+#         return loss

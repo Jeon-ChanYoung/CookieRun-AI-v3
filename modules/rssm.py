@@ -123,6 +123,10 @@ class RSSM(nn.Module):
     def logits_to_indices(self, logits):
         # logits: (..., K, H, W) -> indices: (..., H, W)
         return logits.argmax(dim=-3)
+    
+
+    # @torch.no_grad()
+    # def visualize(self, vqvae, rssm_loader, epoch=0, n_frames=10, save_dir=None):
 
 
     def save_rssm(self, epoch, save_dir):

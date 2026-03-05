@@ -5,11 +5,10 @@ rssm_path: model_params/rssm_ep150.pth
 
 combined_path: oow_combined_data.npz
 is_train: false
+device: cpu 
 
 observation_shape: [3, 128, 256] # (Channels, Height, Width)
 action_size: 3 # (none, jump, slide)
-
-device: cpu 
 
 gradient_norm_type: 2
 gradient_clip: 100
@@ -28,6 +27,8 @@ vqvae_train_epochs: 30
 vqvae_lr: 0.0003
 vqvae_batch_size: 64
 
+perceptual_weight: 0.1 # for VGG loss 
+
 #################### RSSM hyperparameter ####################
 
 rssm_train_epochs: 200
@@ -42,9 +43,9 @@ latent_length: 32
 latent_classes: 32
 latent_size: 1024 # latent_length * latent_classes
 
-label_smoothing: 0.1
+label_smoothing: 0.1 # for cross entropy loss
 rssm_kl_weight: 0.01
 uniform_mix: 0.01
 posterior_coefficient: 0.1
 prior_coefficient: 1.0
-free_nat: 1
+free_nat: 1 # I consider it unnecessary
