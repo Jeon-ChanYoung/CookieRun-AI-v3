@@ -15,12 +15,12 @@ https://github.com/Jeon-ChanYoung/Cookie-Run-AI
 <br>
   
 ## Real
-<!-- <img src="assets/real.gif" width="512"/>   -->
+<img src="assets/real.gif" width="512"/>
 
 <br>
   
 ## Fake (AI-generated)
-<!-- <img src="assets/fake.gif" width="512"/>   -->
+<img src="assets/fake.gif" width="512"/>
 
 #### Model Architecture & Improvements
 
@@ -82,7 +82,7 @@ python main.py
 <br>
 
 ## Simulation  
-<!-- <img src="assets/simulation.gif" width="512"/>   -->
+<img src="assets/simulation.gif" width="512"/>
 
 - ⬆️ Arrow Up: Jump
 - ⬇️ Arrow Down: Slide
