@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+
 from torch.distributions.utils import probs_to_logits
 from .blocks import ResBlock, ImageChannelLayerNorm
 from .utils import straight_through_categorical
@@ -10,10 +11,12 @@ class Encoder(nn.Module):
     def __init__(self, config, codebook_weight=None):
         super().__init__()
 
+        if codebook_weight is None:
+            raise TypeError("__init__() missing required argument: 'codebook_weight'")
+
         self.embed = nn.Embedding(config.vq_codebook_size, config.vq_code_dim)
-        if codebook_weight is not None:
-            self.embed.weight.data.copy_(codebook_weight)
-            self.embed.weight.requires_grad = False 
+        self.embed.weight.data.copy_(codebook_weight)
+        self.embed.weight.requires_grad = False 
 
         self.network = nn.Sequential(
             # (D, 16, 32) -> (64, 8, 16)
@@ -74,13 +77,13 @@ class Decoder(nn.Module):
             # (96, 4, 8) -> (64, 8, 16)
             nn.Upsample(scale_factor=2, mode='nearest'),
             nn.Conv2d(96, 64, 3, 1, 1, bias=False),
-            ImageChannelLayerNorm(64, eps),
+            ImageChannelLayerNorm(64),
             nn.SiLU(),
 
             # (64, 8, 16)-> (K, 16, 32)
             nn.Upsample(scale_factor=2, mode='nearest'),
             nn.Conv2d(64, 64, 3, 1, 1, bias=False),
-            ImageChannelLayerNorm(64, eps),
+            ImageChannelLayerNorm(64),
             nn.SiLU(),
             nn.Conv2d(64, config.vq_codebook_size, 1)
         )
@@ -134,11 +137,13 @@ class RecurrentModel(nn.Module):
             nn.Linear(self.config.latent_size + self.config.action_size, hidden_size, bias=False),
             nn.LayerNorm(hidden_size, eps=eps),
             nn.SiLU(),
+            
             nn.Linear(hidden_size, hidden_size, bias=False),
             nn.LayerNorm(hidden_size, eps=eps),
             nn.SiLU(),
         )
         self.recurrent = GRUCell(hidden_size, self.config.recurrent_size)
+        # self.recurrent = nn.GRUCell(hidden_size, self.config.recurrent_size)
 
     def forward(self, hidden, latent, action):
         x = torch.cat((latent, action), -1)

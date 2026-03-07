@@ -1,7 +1,7 @@
 map_name: oven_of_witch
 
 vqvae_path: model_params/vqvae_ep30.pth
-rssm_path: model_params/rssm_ep120.pth
+rssm_path: model_params/rssm_ep100.pth
 
 combined_path: oow_combined_data.npz
 is_train: false
