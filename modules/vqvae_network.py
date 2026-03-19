@@ -9,7 +9,8 @@ from .blocks import ResBlock, DownBlock, UpBlock
 class VQVAEEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.config = config
+
+        D = config.fsq_code_dim # 3
 
         self.network = nn.Sequential(
             DownBlock(3, 64),    # (B, 3, 128, 256) -> (B, 64, 64, 128)
@@ -27,7 +28,7 @@ class VQVAEEncoder(nn.Module):
             ResBlock(256),
             ResBlock(256),
 
-            nn.Conv2d(256, config.fsq_code_dim, 1)
+            nn.Conv2d(256, D, 1)
         )
 
     def forward(self, x):
@@ -38,10 +39,11 @@ class VQVAEEncoder(nn.Module):
 class VQVAEDecoder(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.config = config
-
+    
+        D = config.fsq_code_dim # 3       
+        
         self.network = nn.Sequential(
-            nn.Conv2d(config.fsq_code_dim, 256, 3, 1, 1),
+            nn.Conv2d(D, 256, 3, 1, 1),
             nn.GroupNorm(32, 256),
             nn.SiLU(),
 
@@ -71,7 +73,6 @@ class FiniteScalarQuantizer(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        self.config = config
         self.D = config.fsq_code_dim      # D = 3
         self.K = config.fsq_codebook_size # K = 64
 

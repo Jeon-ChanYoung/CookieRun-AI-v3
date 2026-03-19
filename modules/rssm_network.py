@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 from torch.distributions.utils import probs_to_logits
-from .blocks import ResBlock, ImageChannelLayerNorm
+from .blocks import ResBlock, DownBlock, UpBlock
 from .utils import straight_through_categorical
 
 ######################## Encoder #########################
@@ -11,95 +11,79 @@ class Encoder(nn.Module):
     def __init__(self, config, codebook_weight=None):
         super().__init__()
 
+        D = config.fsq_code_dim       # 3
+        K = config.fsq_codebook_size  # 64
+        E = config.encoded_state_size # 512
+
         if codebook_weight is None:
             raise TypeError("__init__() missing required argument: 'codebook_weight'")
 
-        self.embed = nn.Embedding(config.vq_codebook_size, config.vq_code_dim)
+        self.embed = nn.Embedding(K, D)
         self.embed.weight.data.copy_(codebook_weight)
-        self.embed.weight.requires_grad = False 
+        self.embed.weight.requires_grad = False
 
         self.network = nn.Sequential(
-            # (D, 16, 32) -> (64, 8, 16)
-            nn.Conv2d(config.vq_code_dim, 64, 3, 2, 1, bias=False),
-            ImageChannelLayerNorm(64),
+            nn.Conv2d(D, 64, 3, 1, 1), # (D, 8, 16) -> (64, 8, 16)
+            nn.GroupNorm(32, 64),
             nn.SiLU(),
 
-            # (64, 8, 16) -> (128, 4, 8)
-            nn.Conv2d(64, 128, 3, 2, 1, bias=False),
-            ImageChannelLayerNorm(128),
-            nn.SiLU(),
-            ResBlock(128),
-
-            # (128, 4, 8) -> (128, 2, 4)
-            nn.Conv2d(128, 128, 3, 2, 1, bias=False),
-            ImageChannelLayerNorm(128),
-            nn.SiLU(),
+            DownBlock(64, 128),  # (D=3, 8, 16) -> (64, 4, 8)
+            DownBlock(128, 256), # (64, 4, 8)   -> (128, 2, 4)
 
             nn.Flatten(),
-            nn.Linear(128 * 2 * 4, config.encoded_state_size, bias=False),
-            nn.LayerNorm(config.encoded_state_size),
-            nn.SiLU(),
+            nn.Linear(256 * 2 * 4, E, bias=False),
+            nn.LayerNorm(E),
+            nn.SiLU()
         )
 
     def forward(self, indices):
+        """
+            indices: (B, 8, 16)              or (B, T, 8, 16)
+            output:  (B, encoded_state_size) or (B, T, encoded_state_size)
+        """
         if indices.ndim == 4:
             B, T, H, W = indices.shape
-            x = indices.reshape(B * T, H, W)
-            x = self.embed(x)
-            x = x.permute(0, 3, 1, 2)
+            x = self.embed(indices.reshape(B * T, H, W)) # (BT, H, W, D)
+            x = x.permute(0, 3, 1, 2)                    # (BT, D, H, W)
             x = self.network(x)
-            x = x.view(B, T, -1)
+            return x.view(B, T, -1)
         else:
-            x = self.embed(indices)
-            x = x.permute(0, 3, 1, 2)
-            x = self.network(x)
-        return x
+            x = self.embed(indices)   # (B, H, W, D)
+            x = x.permute(0, 3, 1, 2) # (B, D, H, W)
+            return self.network(x)
 
 ######################## Decoder #########################
 
 class Decoder(nn.Module):
     def __init__(self, config, eps=1e-3):
         super().__init__()
-        self.config = config
+        
+        K = config.fsq_codebook_size # 64
+        R = config.recurrent_size    # 512
+        L = config.latent_size       # 1024
 
         self.network = nn.Sequential(
-            nn.Linear(config.recurrent_size + config.latent_size, 128 * 2 * 4, bias=False),
-            nn.LayerNorm(128 * 2 * 4, eps=eps),
+            nn.Linear(R + L, 256 * 2 * 4, bias=False),
+            nn.LayerNorm(256 * 2 * 4, eps=eps),
             nn.SiLU(),
-            nn.Unflatten(1, (128, 2, 4)),
+            nn.Unflatten(1, (256, 2, 4)),
 
-            # (128, 2, 4) -> (96, 4, 8)
-            nn.Upsample(scale_factor=2, mode='nearest'),
-            nn.Conv2d(128, 96, 3, 1, 1, bias=False),
-            ImageChannelLayerNorm(96),
-            nn.SiLU(),
+            UpBlock(256, 128), # (256, 2, 4) -> (128, 4, 8)
+            UpBlock(128, 64),  # (128, 4, 8) -> (64, 8, 16)
 
-            # (96, 4, 8) -> (64, 8, 16)
-            nn.Upsample(scale_factor=2, mode='nearest'),
-            nn.Conv2d(96, 64, 3, 1, 1, bias=False),
-            ImageChannelLayerNorm(64),
-            nn.SiLU(),
-
-            # (64, 8, 16)-> (K, 16, 32)
-            nn.Upsample(scale_factor=2, mode='nearest'),
-            nn.Conv2d(64, 64, 3, 1, 1, bias=False),
-            ImageChannelLayerNorm(64),
-            nn.SiLU(),
-            nn.Conv2d(64, config.vq_codebook_size, 1)
+            nn.Conv2d(64, K, 1),  # (64, 8, 16) -> (K, 8, 16)
         )
 
     def forward(self, hidden, latent):
         x = torch.cat((hidden, latent), dim=-1)
-
         if x.ndim == 3:
             B, T, C = x.shape
             x = x.view(B * T, C)
             x = self.network(x)
             _, K, H, W = x.shape
-            x = x.view(B, T, K, H, W)
+            return x.view(B, T, K, H, W)
         else:
-            x = self.network(x)
-        return x
+            return self.network(x)
     
 ######################## RecurrentModel #########################
 
@@ -131,10 +115,13 @@ class GRUCell(nn.Module):
 class RecurrentModel(nn.Module):
     def __init__(self, config, hidden_size=512, eps=1e-3):
         super().__init__()
-        self.config = config
 
+        R = config.recurrent_size # 512
+        L = config.latent_size    # 1024
+        A = config.action_size    # 3
+        
         self.network = nn.Sequential(
-            nn.Linear(self.config.latent_size + self.config.action_size, hidden_size, bias=False),
+            nn.Linear(R + A, hidden_size, bias=False),
             nn.LayerNorm(hidden_size, eps=eps),
             nn.SiLU(),
             
@@ -142,8 +129,8 @@ class RecurrentModel(nn.Module):
             nn.LayerNorm(hidden_size, eps=eps),
             nn.SiLU(),
         )
-        self.recurrent = GRUCell(hidden_size, self.config.recurrent_size)
-        # self.recurrent = nn.GRUCell(hidden_size, self.config.recurrent_size)
+        
+        self.recurrent = GRUCell(hidden_size, R)
 
     def forward(self, hidden, latent, action):
         x = torch.cat((latent, action), -1)
@@ -158,8 +145,11 @@ class TransitionModel(nn.Module):
         super().__init__()
         self.config = config
 
+        R = config.recurrent_size # 512
+        L = config.latent_size    # 1024
+
         self.network = nn.Sequential(
-            nn.Linear(self.config.recurrent_size, hidden_size, bias=False),
+            nn.Linear(R, hidden_size, bias=False),
             nn.LayerNorm(hidden_size, eps=eps),
             nn.SiLU(),
 
@@ -167,14 +157,13 @@ class TransitionModel(nn.Module):
             nn.LayerNorm(hidden_size, eps=eps),
             nn.SiLU(),
 
-            nn.Linear(hidden_size, self.config.latent_size),
+            nn.Linear(hidden_size, L),
         )
 
     def get_logits(self, hidden):
         x = self.network(hidden)
         probs = x.view(-1, self.config.latent_length, self.config.latent_classes).softmax(-1)
-        uniform = torch.ones_like(probs) / self.config.latent_classes
-        probs = (1 - self.config.uniform_mix) * probs + self.config.uniform_mix * uniform
+        probs = (1 - self.config.uniform_mix) * probs + self.config.uniform_mix / self.config.latent_classes
         return probs_to_logits(probs)
 
     def forward(self, hidden):
@@ -189,8 +178,12 @@ class RepresentationModel(nn.Module):
         super().__init__()
         self.config = config
 
+        E = config.encoded_state_size # 512
+        R = config.recurrent_size     # 512
+        L = config.latent_size        # 1024
+
         self.network = nn.Sequential(
-            nn.Linear(self.config.recurrent_size + self.config.encoded_state_size, hidden_size, bias=False),
+            nn.Linear(R + E, hidden_size, bias=False),
             nn.LayerNorm(hidden_size, eps=eps),
             nn.SiLU(),
 
@@ -198,7 +191,7 @@ class RepresentationModel(nn.Module):
             nn.LayerNorm(hidden_size, eps=eps),
             nn.SiLU(),
 
-            nn.Linear(hidden_size, self.config.latent_size),
+            nn.Linear(hidden_size, L),
         )
 
     def forward(self, hidden, encoded_state):
@@ -206,8 +199,7 @@ class RepresentationModel(nn.Module):
         x = self.network(x)
 
         probs = x.view(-1, self.config.latent_length, self.config.latent_classes).softmax(-1)
-        uniform = torch.ones_like(probs) / self.config.latent_classes
-        probs = (1 - self.config.uniform_mix) * probs + self.config.uniform_mix * uniform
+        probs = (1 - self.config.uniform_mix) * probs + self.config.uniform_mix / self.config.latent_classes
         logits = probs_to_logits(probs)
 
         sample = straight_through_categorical(logits)

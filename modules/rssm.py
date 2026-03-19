@@ -76,7 +76,12 @@ class RSSM(nn.Module):
 
         # for logging
         with torch.no_grad():
-            accuracy = (pred_flat.argmax(-1) == target_flat).float().mean()
+            predicted = pred_flat.argmax(dim=-1)
+            accuracy = (predicted == target_flat).float().mean()
+
+            top5_predicted = pred_flat.topk(5, dim=-1).indices  # (N, 5)
+            target_expanded = target_flat.unsqueeze(-1)          # (N, 1)
+            top5_accuracy = (top5_predicted == target_expanded).any(dim=-1).float().mean()
 
         # kl loss
         prior_loss = self.compute_kl(posteriors_logits.detach(), priors_logits)
@@ -85,20 +90,26 @@ class RSSM(nn.Module):
         posterior_loss = self.config.posterior_coefficient * posterior_loss.clamp(min=self.config.free_nat)
         kl_loss = (prior_loss + posterior_loss).mean()
 
-        loss = reconstruction_loss + kl_loss
+        loss = reconstruction_loss + kl_loss * self.config.rssm_kl_weight
 
         ############# backprop #############
 
-        self.world_model_optimizer.zero_grad()
+        self.rssm_optimizer.zero_grad()
         loss.backward()
         nn.utils.clip_grad_norm_(
-            self.world_model_parameters, 
+            self.parameters(), 
             self.config.gradient_clip, 
             self.config.gradient_norm_type
         )
-        self.world_model_optimizer.step()
+        self.rssm_optimizer.step()
 
-        return loss.item(), reconstruction_loss.item(), kl_loss.item(), accuracy.item()
+        return (
+            loss.item(), 
+            reconstruction_loss.item(), 
+            kl_loss.item(), 
+            accuracy.item(),
+            top5_accuracy.item()
+        )
     
 
     def compute_kl(self, logits_p, logits_q):
@@ -130,16 +141,13 @@ class RSSM(nn.Module):
 
 
     def save_rssm(self, epoch, save_dir):
-        def strip_prefix(state_dict):
-            return {k.replace('_orig_mod.', ''): v for k, v in state_dict.items()}
-
         save_path = os.path.join(save_dir, f'rssm_ep{epoch}.pth')
         torch.save({
-            'encoder'               : strip_prefix(self.encoder.state_dict()),
-            'decoder'               : strip_prefix(self.decoder.state_dict()),
-            'recurrent_model'       : strip_prefix(self.recurrent_model.state_dict()),
-            'transition_model'      : strip_prefix(self.transition_model.state_dict()),
-            'representation_model'  : strip_prefix(self.representation_model.state_dict()),
+            'encoder'               : self.encoder.state_dict(),
+            'decoder'               : self.decoder.state_dict(),
+            'recurrent_model'       : self.recurrent_model.state_dict(),
+            'transition_model'      : self.transition_model.state_dict(),
+            'representation_model'  : self.representation_model.state_dict(),
             'rssm_optimizer'        : self.rssm_optimizer.state_dict()
         }, save_path)
         print(f"RSSM Model saved: {save_path}")
@@ -149,13 +157,10 @@ class RSSM(nn.Module):
         print(f"Loading checkpoint: {check_point_path}")
         checkpoint = torch.load(check_point_path, map_location=self.config.device)
 
-        def strip_prefix(state_dict):
-            return {k.replace('_orig_mod.', ''): v for k, v in state_dict.items()}
-
-        self.encoder.load_state_dict(strip_prefix(checkpoint['encoder']))
-        self.decoder.load_state_dict(strip_prefix(checkpoint['decoder']))
-        self.recurrent_model.load_state_dict(strip_prefix(checkpoint['recurrent_model']))
-        self.transition_model.load_state_dict(strip_prefix(checkpoint['transition_model']))
-        self.representation_model.load_state_dict(strip_prefix(checkpoint['representation_model']))
+        self.encoder.load_state_dict(checkpoint['encoder'])
+        self.decoder.load_state_dict(checkpoint['decoder'])
+        self.recurrent_model.load_state_dict(checkpoint['recurrent_model'])
+        self.transition_model.load_state_dict(checkpoint['transition_model'])
+        self.representation_model.load_state_dict(checkpoint['representation_model'])
         self.rssm_optimizer.load_state_dict(checkpoint['rssm_optimizer'])
         print("RSSM Checkpoint loaded successfully.")
