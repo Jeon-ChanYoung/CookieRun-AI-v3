@@ -13,39 +13,38 @@ action_size: 3 # (none, jump, slide)
 gradient_norm_type: 2
 gradient_clip: 100
 
-#################### VQ-VAE hyperparameter ####################
+#################### FSQ VQ-VAE hyperparameter ####################
 
-vq_codebook_size: 256    
-vq_code_dim: 8       
-vq_commitment_cost: 0.25   
-vq_ema_decay: 0.99       
+fsq_levels: [4, 4, 4]
+fsq_code_dim: 3       # len(fsq_levels), D = 3
+fsq_codebook_size: 64 # K = 64 
 
-vq_spatial_shape: [16, 32] 
-vq_num_tokens: 512 # 16 * 32   
+fsq_spatial_shape: [8, 16] # (Height, Width)
+fsq_num_tokens: 128 # H * W = 128
 
 vqvae_train_epochs: 30
-vqvae_lr: 0.0003
+vqvae_lr: 0.001
 vqvae_batch_size: 64
 
-perceptual_weight: 0.1 # for VGG loss 
+perceptual_weight: 0.3 # for VGG loss 
 
 #################### RSSM hyperparameter ####################
 
-rssm_train_epochs: 100
-rssm_lr: 0.0003
+rssm_train_epochs: 300
+rssm_lr: 0.001
 
-rssm_batch_size: 128
+rssm_batch_size: 512
 rssm_batch_length: 32
 
-encoded_state_size: 1024
+encoded_state_size: 512
 recurrent_size: 512
 latent_length: 32
 latent_classes: 32
 latent_size: 1024 # latent_length * latent_classes
 
-label_smoothing: 0.1 # for cross entropy loss
-rssm_kl_weight: 0.01
+label_smoothing: 0 # Not very helpful whether its 0.1 or 0.01.
+rssm_kl_weight: 0.1
 uniform_mix: 0.01
 posterior_coefficient: 0.1
 prior_coefficient: 1.0
-free_nat: 1 # I consider it unnecessary
+free_nat: 1 # for preventing posterior collapse early in training.
