@@ -98,20 +98,24 @@ As you can see here, even if we reduce K and D slightly, the final loss values r
 <img src="assets/rssm_acc.png" alt="acc" width="600">
 
 ```
-Epoch [  1/100] RSSM loss: 3.428530  recon: 3.415260  kl: 1.327025  acc: 0.3446
-Epoch [  2/100] RSSM loss: 2.967180  recon: 2.941917  kl: 2.526307  acc: 0.4186
-Epoch [  3/100] RSSM loss: 2.726436  recon: 2.695507  kl: 3.092921  acc: 0.4796
-Epoch [  4/100] RSSM loss: 2.506273  recon: 2.477390  kl: 2.888293  acc: 0.5286
-Epoch [  5/100] RSSM loss: 2.510147  recon: 2.480252  kl: 2.989504  acc: 0.5280
+Epoch [  1/400] RSSM loss: 3.573033  recon: 3.463033  kl: 1.100000  acc: 0.1418  top5: 0.4047
+Epoch [  2/400] RSSM loss: 3.530106  recon: 3.420106  kl: 1.100000  acc: 0.1437  top5: 0.4121
+Epoch [  3/400] RSSM loss: 3.526842  recon: 3.416842  kl: 1.100000  acc: 0.1437  top5: 0.4110
+Epoch [  4/400] RSSM loss: 3.500003  recon: 3.390003  kl: 1.100000  acc: 0.1476  top5: 0.4177
+Epoch [  5/400] RSSM loss: 3.488622  recon: 3.378612  kl: 1.100107  acc: 0.1486  top5: 0.4210
 ...
-Epoch [ 96/100] RSSM loss: 1.803927  recon: 1.768754  kl: 3.517291  acc: 0.7188
-Epoch [ 97/100] RSSM loss: 1.845641  recon: 1.801281  kl: 3.436019  acc: 0.7082
-Epoch [ 98/100] RSSM loss: 1.817078  recon: 1.783470  kl: 3.360827  acc: 0.7163
-Epoch [ 99/100] RSSM loss: 1.858833  recon: 1.823287  kl: 3.554642  acc: 0.7027
-Epoch [100/100] RSSM loss: 1.825670  recon: 1.791427  kl: 3.424293  acc: 0.7124
+Epoch [396/400] RSSM loss: 0.815932  recon: 0.597647  kl: 2.182859  acc: 0.7973  top5: 0.9679
+Epoch [397/400] RSSM loss: 0.877138  recon: 0.614608  kl: 2.625297  acc: 0.7909  top5: 0.9660
+Epoch [398/400] RSSM loss: 0.822521  recon: 0.594985  kl: 2.275353  acc: 0.7975  top5: 0.9681
+Epoch [399/400] RSSM loss: 0.823704  recon: 0.600613  kl: 2.230909  acc: 0.7963  top5: 0.9675
+Epoch [400/400] RSSM loss: 0.809256  recon: 0.591078  kl: 2.181778  acc: 0.7989  top5: 0.9684
 ```
 
-Here, "Accuracy" refers to the ratio of predicted VQ token indices that match the actual VQ tokens.  
+Here, acc (Accuracy) and top5 (Top-5 Accuracy) measure how well the RSSM's decoder predicts the correct VQ token index at each spatial position:  
+
+- acc (Top-1 Accuracy): The proportion of spatial tokens for which the RSSM decoder's single highest-probability prediction exactly matches the ground-truth VQ token index. An accuracy of 0.7989 means that ~80% of the 128 tokens per frame are predicted correctly on the first guess.  
+
+- top5 (Top-5 Accuracy): The proportion of spatial tokens for which the ground-truth VQ token index appears within the decoder's top 5 highest-probability predictions (out of 64 possible codebook entries). A top-5 accuracy of 0.9684 means that ~97% of the time, the correct token is among the model's 5 most confident candidates.  
 
 <br>
 
