@@ -147,7 +147,7 @@ python main.py
 <br>
 
 ## Simulation  
-<!-- <img src="assets/simulation.gif" width="600"/> -->
+<img src="assets/simulation.gif" width="600"/>
 
 - ⬆️ Arrow Up: Jump
 - ⬇️ Arrow Down: Slide
