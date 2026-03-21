@@ -1,9 +1,10 @@
 # Cookie-Run-AI-v3
 Play in an environment where an AI learns the first stage of Cookie Run, “The Witch's Oven,” and generates the next screen in real time based on your input.  
 
-**Previous Version:**
-https://github.com/Jeon-ChanYoung/Cookie-Run-AI
-
+**Previous Version:**  
+- https://github.com/Jeon-ChanYoung/Cookie-Run-AI
+- https://github.com/Jeon-ChanYoung/Cookie-Run-AI-v2
+- 
 <br>
 
 | Item | Detail |
