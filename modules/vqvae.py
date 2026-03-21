@@ -45,7 +45,7 @@ class VQVAE(nn.Module):
     @torch.no_grad()
     def encode(self, x):
         z_e = self.encoder(x)
-        _, indices, _ = self.quantizer(z_e)
+        _, indices = self.quantizer(z_e)
         return indices  # (B, 8, 16)
 
     
