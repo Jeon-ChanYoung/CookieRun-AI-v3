@@ -29,16 +29,22 @@ class Wrapper:
         self._jpeg_params = [cv2.IMWRITE_JPEG_QUALITY, 95]
 
         # recording
-        self.recording_dir = getattr(config, "recording_dir", "recordings")
-        os.makedirs(self.recording_dir, exist_ok=True)
+        self.enable_recording = config.enable_recording
+        self.recording_dir = "recordings"
+        if self.enable_recording:
+            os.makedirs(self.recording_dir, exist_ok=True)
         self._video_writer = None
         self._frame_count = 0
         self._record_start = None
+
         self.reset()
         print("Game state initialized")
 
 
     def _start_recording(self, frame):
+        if not self.enable_recording:
+            return
+
         h, w = frame.shape[:2]
         timestamp = time.strftime("%Y%m%d_%H%M%S")
         filename = os.path.join(self.recording_dir, f"gameplay_{timestamp}.mp4")
@@ -52,7 +58,7 @@ class Wrapper:
         print(f"🔴 Recording started: {filename}")
 
     def _save_recording(self):
-        if self._video_writer is None:
+        if not self.enable_recording or self._video_writer is None:
             return
 
         self._video_writer.release()
@@ -68,8 +74,9 @@ class Wrapper:
 
 
     def _record_frame(self, img_rgb):
-        if self._video_writer is None:
+        if not self.enable_recording or self._video_writer is None:
             return
+        
         img_bgr = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2BGR)
         self._video_writer.write(img_bgr)
         self._frame_count += 1

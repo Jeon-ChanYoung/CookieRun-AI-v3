@@ -5,7 +5,7 @@ rssm_path: model_params/rssm_ep400.pth
 
 combined_path: oow_combined_data.npz
 is_train: false
-device: cpu 
+device: cuda 
 
 observation_shape: [3, 128, 256] # (Channels, Height, Width)
 action_size: 3 # (none, jump, slide)
@@ -14,6 +14,7 @@ gradient_norm_type: 2
 gradient_clip: 100
 
 video_fps: 24
+enable_recording: false
 
 #################### FSQ VQ-VAE hyperparameter ####################
 
