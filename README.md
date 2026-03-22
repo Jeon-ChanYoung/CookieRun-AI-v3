@@ -129,7 +129,7 @@ pip install -r requirements.txt
 <br>
 
 **2. Setup Pre-trained Model:**  
-Download the pre-trained weights (vqvae_ep30.pth, rssm_ep100.pth) from the Releases page and place them in the directory structure as follows:  
+Download the pre-trained weights (vqvae_ep30.pth, rssm_ep400.pth) from the Releases page and place them in the directory structure as follows:  
 ```
 model_params/
     └── rssm_ep400.pth
