@@ -46,7 +46,7 @@ This project is an **enhanced version of Cookie-Run-AI v2**, featuring significa
 | **Codebook Size ($K$)** | - | 256 | **64** (Levels: [4, 4, 4]) |
 | **Code Dim ($D$)** | - | 8 | **3** |
 | **Spatial Resolution** | Pixel level | 16 x 32 (512 tokens) | **8 x 16 (128 tokens)** |
-| **CNN Backbone** | Standard CNN | Standard ResNet | **Enhanced ResNet (deeper)** |
+| **CNN Backbone** | Standard CNN | Standard ResNet | **Deeper ResNet** |
 
 <br>
 
@@ -153,4 +153,4 @@ python main.py
 - ⬇️ Arrow Down: Slide
 - 🔄 R Key: Reset  
 
-Due to the limited size of the dataset, unable to cover all possible game scenarios, and there may be some blur regarding unusual(or unique) gameplay. In particular, the following stages are not included.  
+Due to the limited size of the training dataset, the model does not cover all possible game scenarios. Some visual artifacts or blur may appear during unusual gameplay patterns (e.g., repeated jump inputs). Additionally, the dataset only contains footage from the first stage; subsequent stages are not included.  
